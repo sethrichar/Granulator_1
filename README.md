@@ -76,7 +76,15 @@ effected signal, and the effect gets fed back through memory) or **Post**
   soft saturation so it self-oscillates politely.
 * **Reverb** – size, damping, width, pre-delay, mix.
 
-## Building
+## Getting a build without compiling
+
+Every push builds macOS (universal VST3 / AU / Standalone), Windows (VST3 /
+Standalone) and Linux (VST3) automatically. Open the repo's **Actions** tab,
+click the latest green run, and download the artifact for your platform.
+Install steps, including the one-time macOS quarantine fix, are in
+[docs/INSTALL.md](docs/INSTALL.md).
+
+## Building from source
 
 Requires CMake ≥ 3.22 and a C++17 compiler. JUCE 8.0.9 is fetched
 automatically, or point at a local checkout with `-DJUCE_DIR=/path/to/JUCE`.
