@@ -1,0 +1,111 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  macos:
+    name: macOS (universal)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Xcode
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+
+      - name: Build
+        run: cmake --build build --config $BUILD_TYPE --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C $BUILD_TYPE --output-on-failure
+
+      - name: Ad-hoc sign and package
+        run: |
+          set -e
+          ART=build/Ruminate_artefacts/$BUILD_TYPE
+          codesign --force --deep -s - "$ART/VST3/Ruminate.vst3"
+          codesign --force --deep -s - "$ART/AU/Ruminate.component"
+          codesign --force --deep -s - "$ART/Standalone/Ruminate.app"
+          mkdir -p dist
+          # zip with ditto so bundle permissions survive the artifact upload
+          ditto -c -k --keepParent "$ART/VST3/Ruminate.vst3"      dist/Ruminate-macOS-VST3.zip
+          ditto -c -k --keepParent "$ART/AU/Ruminate.component"   dist/Ruminate-macOS-AU.zip
+          ditto -c -k --keepParent "$ART/Standalone/Ruminate.app" dist/Ruminate-macOS-Standalone.zip
+          cp docs/INSTALL.md dist/README-INSTALL.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ruminate-macOS
+          path: dist/
+          if-no-files-found: error
+
+  windows:
+    name: Windows
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C ${{ env.BUILD_TYPE }} --output-on-failure
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $art = "build/Ruminate_artefacts/${{ env.BUILD_TYPE }}"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item -Recurse "$art/VST3/Ruminate.vst3" dist/
+          Copy-Item "$art/Standalone/Ruminate.exe" dist/
+          Copy-Item docs/INSTALL.md dist/README-INSTALL.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ruminate-Windows
+          path: dist/
+          if-no-files-found: error
+
+  linux:
+    name: Linux (tests)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxext-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev libcurl4-openssl-dev
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp -r build/Ruminate_artefacts/$BUILD_TYPE/VST3/Ruminate.vst3 dist/
+          cp docs/INSTALL.md dist/README-INSTALL.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ruminate-Linux
+          path: dist/
+          if-no-files-found: error
